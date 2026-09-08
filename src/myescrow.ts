@@ -51,8 +51,9 @@ export class MyEscrow {
 
   /**
    * Initialize contract configuration
-   * @param arbiter - Account that resolves disputes
-   * @param treasury - Account that collects platform fees (xprotonarena)
+   * Arbiter: xprotonarena - resolves disputes and releases funds
+   * Treasury: xprotonarena - collects 2% platform fees
+   * Escrow Account: xprotonarena - holds escrowed funds
    */
   @Action("initconfig")
   initconfig(arbiter: Name, treasury: Name): void {
@@ -60,8 +61,8 @@ export class MyEscrow {
     
     const config = new Config();
     config.key = 0;
-    config.arbiter = arbiter;
-    config.treasury = treasury;
+    config.arbiter = arbiter; // xprotonarena
+    config.treasury = treasury; // xprotonarena
     config.platformFeeBP = 200; // 2% fee by default
     config.paused = false;
 
@@ -70,11 +71,11 @@ export class MyEscrow {
 
   /**
    * Handle incoming token transfers
-   * Intercepts XPR transfers and creates escrow entries
+   * Intercepts XPR transfers sent to xprotonarena escrow account
    */
   @Action("transfer", "notify")
   onTransfer(from: Name, to: Name, quantity: Asset, memo: string): void {
-    // Only process transfers TO this contract
+    // Only process transfers TO this contract (xprotonarena)
     if (to != this.receiver) {
       return;
     }
@@ -88,7 +89,7 @@ export class MyEscrow {
     escrow.id = this.getNextEscrowId();
     escrow.sender = from;
     escrow.receiver = Name.fromString(""); // Will be set by arbiter
-    escrow.arbiter = this.getConfig().arbiter;
+    escrow.arbiter = this.getConfig().arbiter; // xprotonarena
     escrow.amount = quantity;
     escrow.status = "pending";
     escrow.createdAt = currentTime();
@@ -101,14 +102,14 @@ export class MyEscrow {
   }
 
   /**
-   * Release escrowed funds to winner (standard case)
-   * Deducts 2% fee and sends to treasury (xprotonarena) unless there's a tie
-   * Can only be called by arbiter
+   * Release escrowed funds to winner
+   * Deducts 2% fee and sends to xprotonarena treasury unless there's a tie
+   * Can only be called by arbiter (xprotonarena)
    */
   @Action("release")
   release(escrowId: u64, winner: Name, isTie: boolean = false): void {
     const config = this.getConfig();
-    check(hasAuth(config.arbiter), "Only arbiter can release funds");
+    check(hasAuth(config.arbiter), "Only arbiter (xprotonarena) can release funds");
 
     const escrow = this.escrowTable.get(escrowId);
     check(escrow.status == "pending", "Escrow is not in pending status");
@@ -131,7 +132,7 @@ export class MyEscrow {
 
   /**
    * Handle tie scenario: refund both players without fee
-   * Treasury (xprotonarena) does not receive any fee on ties
+   * Treasury (xprotonarena) receives no fee on ties
    */
   private handleTieRefund(escrow: Escrow): void {
     // Send full amount back to sender (player 1)
@@ -148,7 +149,7 @@ export class MyEscrow {
 
   /**
    * Handle normal winner payout with 2% fee deduction
-   * 2% fee goes to treasury (xprotonarena)
+   * 2% fee goes to xprotonarena treasury
    */
   private handleWinnerPayout(escrow: Escrow, winner: Name, config: Config): void {
     // Calculate 2% platform fee
@@ -163,7 +164,7 @@ export class MyEscrow {
       "Match won - payout after 2% fee"
     );
 
-    // Send 2% fee to treasury (xprotonarena)
+    // Send 2% fee to xprotonarena treasury
     if (fee > 0) {
       this.sendInlineTransfer(
         this.receiver,
@@ -177,12 +178,12 @@ export class MyEscrow {
   /**
    * Refund escrowed funds to sender (emergency/dispute)
    * No fee deducted - full amount returned
-   * Can only be called by arbiter
+   * Can only be called by arbiter (xprotonarena)
    */
   @Action("refund")
   refund(escrowId: u64): void {
     const config = this.getConfig();
-    check(hasAuth(config.arbiter), "Only arbiter can refund");
+    check(hasAuth(config.arbiter), "Only arbiter (xprotonarena) can refund");
 
     const escrow = this.escrowTable.get(escrowId);
     check(escrow.status == "pending", "Escrow is not in pending status");
@@ -198,13 +199,13 @@ export class MyEscrow {
 
   /**
    * Resolve a disputed escrow
-   * Arbiter determines winner and applies 2% fee (sent to xprotonarena treasury)
-   * No fee deducted on tie
+   * Arbiter (xprotonarena) determines winner and applies 2% fee
+   * No fee deducted on tie - players get full refund
    */
   @Action("resolve")
   resolve(escrowId: u64, winner: Name, isTie: boolean = false): void {
     const config = this.getConfig();
-    check(hasAuth(config.arbiter), "Only arbiter can resolve disputes");
+    check(hasAuth(config.arbiter), "Only arbiter (xprotonarena) can resolve disputes");
 
     const escrow = this.escrowTable.get(escrowId);
     check(escrow.status == "pending", "Escrow is not in pending status");
@@ -227,11 +228,12 @@ export class MyEscrow {
 
   /**
    * Pause/unpause the contract
+   * Can only be called by arbiter (xprotonarena)
    */
   @Action("setpaused")
   setpaused(paused: boolean): void {
     const config = this.getConfig();
-    check(hasAuth(config.arbiter), "Only arbiter can pause/unpause");
+    check(hasAuth(config.arbiter), "Only arbiter (xprotonarena) can pause/unpause");
 
     config.paused = paused;
     this.configTable.update(config, this.receiver);
@@ -239,12 +241,13 @@ export class MyEscrow {
 
   /**
    * Update platform fee (2% = 200 basis points)
-   * Fee goes to treasury (xprotonarena)
+   * Fee goes to xprotonarena treasury
+   * Can only be called by arbiter (xprotonarena)
    */
   @Action("setfee")
   setfee(feeInBP: u16): void {
     const config = this.getConfig();
-    check(hasAuth(config.arbiter), "Only arbiter can update fees");
+    check(hasAuth(config.arbiter), "Only arbiter (xprotonarena) can update fees");
     check(feeInBP <= 10000, "Fee cannot exceed 100%");
 
     config.platformFeeBP = feeInBP;
