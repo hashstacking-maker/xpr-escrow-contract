@@ -52,7 +52,7 @@ export class MyEscrow {
   /**
    * Initialize contract configuration
    * @param arbiter - Account that resolves disputes
-   * @param treasury - Account that collects platform fees
+   * @param treasury - Account that collects platform fees (xprotonarena)
    */
   @Action("initconfig")
   initconfig(arbiter: Name, treasury: Name): void {
@@ -102,7 +102,7 @@ export class MyEscrow {
 
   /**
    * Release escrowed funds to winner (standard case)
-   * Deducts 2% fee unless there's a tie
+   * Deducts 2% fee and sends to treasury (xprotonarena) unless there's a tie
    * Can only be called by arbiter
    */
   @Action("release")
@@ -114,7 +114,7 @@ export class MyEscrow {
     check(escrow.status == "pending", "Escrow is not in pending status");
 
     if (isTie) {
-      // TIE CASE: Refund both players, no fee
+      // TIE CASE: Refund both players, no fee to treasury
       this.handleTieRefund(escrow);
     } else {
       // NORMAL CASE: Deduct 2% fee and payout to winner
@@ -131,9 +131,10 @@ export class MyEscrow {
 
   /**
    * Handle tie scenario: refund both players without fee
+   * Treasury (xprotonarena) does not receive any fee on ties
    */
   private handleTieRefund(escrow: Escrow): void {
-    // Send full amount back to sender (will handle receiver separately if applicable)
+    // Send full amount back to sender (player 1)
     this.sendInlineTransfer(
       this.receiver,
       escrow.sender,
@@ -147,6 +148,7 @@ export class MyEscrow {
 
   /**
    * Handle normal winner payout with 2% fee deduction
+   * 2% fee goes to treasury (xprotonarena)
    */
   private handleWinnerPayout(escrow: Escrow, winner: Name, config: Config): void {
     // Calculate 2% platform fee
@@ -161,11 +163,11 @@ export class MyEscrow {
       "Match won - payout after 2% fee"
     );
 
-    // Send 2% fee to treasury
+    // Send 2% fee to treasury (xprotonarena)
     if (fee > 0) {
       this.sendInlineTransfer(
         this.receiver,
-        config.treasury,
+        config.treasury, // xprotonarena
         Asset.from(fee, escrow.amount.symbol),
         "2% platform fee from match"
       );
@@ -174,6 +176,7 @@ export class MyEscrow {
 
   /**
    * Refund escrowed funds to sender (emergency/dispute)
+   * No fee deducted - full amount returned
    * Can only be called by arbiter
    */
   @Action("refund")
@@ -189,13 +192,14 @@ export class MyEscrow {
     escrow.resolvedAt = currentTime();
     this.escrowTable.update(escrow, this.receiver);
 
-    // Send full refund back to sender (no fee)
+    // Send full refund back to sender (no fee to treasury)
     this.sendInlineTransfer(this.receiver, escrow.sender, escrow.amount, "Escrow refund - no fee");
   }
 
   /**
    * Resolve a disputed escrow
-   * Arbiter determines winner and applies 2% fee (no fee on tie)
+   * Arbiter determines winner and applies 2% fee (sent to xprotonarena treasury)
+   * No fee deducted on tie
    */
   @Action("resolve")
   resolve(escrowId: u64, winner: Name, isTie: boolean = false): void {
@@ -206,7 +210,7 @@ export class MyEscrow {
     check(escrow.status == "pending", "Escrow is not in pending status");
 
     if (isTie) {
-      // TIE CASE: Refund both players, no fee
+      // TIE CASE: Refund both players, no fee to treasury
       this.handleTieRefund(escrow);
     } else {
       // NORMAL CASE: Deduct 2% fee and payout to winner
@@ -235,6 +239,7 @@ export class MyEscrow {
 
   /**
    * Update platform fee (2% = 200 basis points)
+   * Fee goes to treasury (xprotonarena)
    */
   @Action("setfee")
   setfee(feeInBP: u16): void {
