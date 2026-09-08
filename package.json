@@ -1,0 +1,30 @@
+{
+  "name": "xpr-escrow-contract",
+  "version": "1.0.0",
+  "description": "XPR Network escrow smart contract for arena match settlements",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm run compile && npm run abi",
+    "compile": "proton contract:build",
+    "abi": "proton contract:abi",
+    "deploy": "proton contract:set xprotonarena ./target",
+    "test": "jest"
+  },
+  "keywords": [
+    "xpr",
+    "escrow",
+    "smart-contract",
+    "proton"
+  ],
+  "author": "hashstacking-maker",
+  "license": "MIT",
+  "dependencies": {
+    "@proton/contract": "^1.0.0",
+    "@proton/ts-lib": "^1.0.0"
+  },
+  "devDependencies": {
+    "@proton/cli": "latest",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0"
+  }
+}
